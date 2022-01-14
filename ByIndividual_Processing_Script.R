@@ -443,7 +443,6 @@ for(i in shortlst) {
 
   data <- rbindlist(list(behaviorToDup, data))[order(OG_order)]
 
-
   ## -------------------------------------------------------------------------------------------------------------------------------------------------------------------
   data <- data %>%
     mutate(End.Time = as_hms(End.Sec)) %>%
