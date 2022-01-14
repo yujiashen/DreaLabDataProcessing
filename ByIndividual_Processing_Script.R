@@ -24,7 +24,7 @@ for(i in shortlst) {
     i$Time...2 <- as_hms(i$Time...2)
   }
 
-  data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission")
+  data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission", Pupcare = "Pup care")
 
   data$Play <- as.character(data$Play)
   data$AggSub <- as.character(data$AggSub)
@@ -39,6 +39,11 @@ for(i in shortlst) {
     mutate(CHECK = NA) %>%
     mutate(removerow = NA)
 
+  ## ----Pup-care-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  data <- data %>%
+    mutate(CHECK = ifelse(!is.na(Pupcare), TRUE, CHECK)) %>%
+    rename("Pup care" = "Pupcare")
 
   ## ----GA-------------------------------------------------------------------------------------------------------------------------------------------------------------
   dataGA <- data %>%
@@ -464,4 +469,4 @@ for(i in shortlst) {
 
 sheetnamesvec <- excel_sheets("data/Pup8MoIndividual_copy_for_ys.xlsx")
 names(newlist) <- sheetnamesvec[2:59]
-write.xlsx(newlist, "Pup8MoIndividual_ys_v5.xlsx", append = TRUE)
+write.xlsx(newlist, "Pup8MoIndividual_ys_v6.xlsx", append = TRUE)

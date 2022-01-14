@@ -32,7 +32,7 @@ if(grepl("1899-12-31", i$Time...2) == FALSE & i$Time...2 < 1) {
   i$Time...2 <- as_hms(i$Time...2)
 }
 
-data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission")
+data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission", Pupcare = "Pup care")
 
   data$Play <- as.character(data$Play)
   data$AggSub <- as.character(data$AggSub)
@@ -46,6 +46,12 @@ data <- data %>%
   mutate(OG_order = seq.int(nrow(data))) %>%
   mutate(CHECK = NA) %>%
   mutate(removerow = NA)
+```
+
+```{r Pupcare}
+data <- data %>%
+  mutate(CHECK = ifelse(!is.na(Pupcare), TRUE, CHECK)) %>%
+  rename("Pup care" = "Pupcare")
 ```
 
 ```{r GA}
@@ -470,5 +476,10 @@ data <- rbindlist(list(behaviorToDup, data))[order(OG_order)]
                     "Olfactory", "Play", "Pup care", "Sex", "Modifiers", "Life History", "Time",
                     "Time spent running", "Comments", "CHECK"))
 ```
+
+```{r}
+write.xlsx(data, "data_file.xlsx")
+```
+
 
 
