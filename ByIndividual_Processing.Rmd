@@ -17,7 +17,7 @@ library(openxlsx)
 
 
 ```{r load-rename-data}
-i <- read_excel("data/Pup8MoIndividual_copy_for_ys.xlsx", sheet = 25)
+i <- read_excel("data/Pup8MoIndividual_copy_for_ys.xlsx", sheet = 2)
 
 if(grepl("1899-12-31", i$Time...2) == FALSE & i$Time...2 < 1) {
   i$Time...2 <- round(as.numeric(i$Time...2) * 86400)
@@ -27,7 +27,8 @@ if(grepl("1899-12-31", i$Time...2) == FALSE & i$Time...2 < 1) {
   i$Time...2 <- as_hms(i$Time...2)
 }
 
-data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission", Pupcare = "Pup care")
+data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission", Pupcare = "Pup care") %>%
+    rename_at(vars(ends_with('focal individual')), ~"Focal individual")
 
   data$Play <- as.character(data$Play)
   data$AggSub <- as.character(data$AggSub)
@@ -41,6 +42,25 @@ data <- data %>%
   mutate(OG_order = seq.int(nrow(data))) %>%
   mutate(CHECK = NA) %>%
   mutate(removerow = NA)
+```
+
+```{r Focal.ID}
+data <- data %>%
+  #Get focal indiv name between parentheses
+  mutate(focal_ind = gsub("(?<=\\()[^()]*(?=\\))(*SKIP)(*F)|.", "", `Focal individual`, perl=T)) %>%
+  #Fill rest of column with previous focal_ind
+  fill(focal_ind) %>%
+  mutate(Location = case_when(grepl("Burrow", `Focal individual`) & !grepl("Forage", `Focal individual`) ~ "Burrow",
+                              grepl("Forage", `Focal individual`) & !grepl("Burrow", `Focal individual`) ~ "Forage",
+                              grepl("Burrow", `Focal individual`) & grepl("Forage", `Focal individual`) ~ "Burrow; Forage")) %>%
+  mutate(month = month(Date)) %>%
+  mutate(is_Start = ifelse(grepl("Start focal", Behavior), TRUE, FALSE)) %>%
+  #When a new Start focal appears, iterate the focal number
+  mutate(focalnum = ifelse(is_Start == TRUE, 0 + cumsum(is_Start == TRUE), 0 + cumsum(is_Start == TRUE))) %>%
+  unite(Focal.ID, month, focalnum, focal_ind, sep = ".") %>%
+  relocate(Focal.ID) %>%
+  relocate(Location, .after = `Focal individual`) %>%
+  select(-is_Start)
 ```
 
 ```{r Pupcare}
@@ -60,7 +80,8 @@ dataGA <- data %>%
   mutate(Duration = End.Sec - St.Sec) %>%
   mutate(Modifiers = ifelse(Followed == "TRUE", lead(Modifiers), Modifiers)) %>%
   mutate(removerow = ifelse(is.na(CHECK) & grepl("GA; End", Behavior), TRUE, removerow)) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, Comments, removerow, CHECK)
 ```
 
 ```{r GT}
@@ -76,7 +97,8 @@ dataGT <- data %>%
   mutate(Duration = End.Sec - St.Sec) %>%
   mutate(Modifiers = ifelse(Followed == "TRUE", lead(Modifiers), Modifiers)) %>%
   mutate(removerow = ifelse(is.na(CHECK) & grepl("GT; End", Behavior), TRUE, removerow)) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, Comments, CHECK)
 ```
 
 ```{r Burr/BH}
@@ -93,7 +115,8 @@ dataBurrBH <- data %>%
   mutate(Modifiers = ifelse(BurrBH_only == TRUE & Followed == "TRUE" & End != "TRUE", lead(Modifiers), Modifiers)) %>%
   mutate(removerow = ifelse(is.na(CHECK) & grepl("Burr/BH renn; End", Behavior), TRUE, removerow)) %>%
   filter(BurrBH_only) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, Comments, removerow, CHECK)
 ```
 
 ```{r InBurrBH}
@@ -108,7 +131,8 @@ dataInBurr <- data %>%
   mutate(Duration = End.Sec - St.Sec) %>%
   mutate(Modifiers = ifelse(Followed == "TRUE" & End != "TRUE", lead(Modifiers), Modifiers)) %>%
   mutate(removerow = ifelse(is.na(CHECK) & grepl("In burr/BH; End", Behavior), TRUE, removerow)) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, Comments, removerow, CHECK)
 ```
 
 ```{r OutOfView}
@@ -123,12 +147,45 @@ dataOOV <- data %>%
   mutate(Duration = End.Sec - St.Sec) %>%
   mutate(Modifiers = ifelse(Followed == "TRUE" & End != "TRUE", lead(Modifiers), Modifiers)) %>%
   mutate(removerow = ifelse(is.na(CHECK) & grepl("Out of view; End", Behavior), TRUE, removerow)) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, Comments, removerow, CHECK)
 ```
 
+
 ```{r Dig}
+#For digs which are followed by behavior != Nearest neigh, Other vig, or Ends --> 
+#mark and put ending sec as starting second of following behavior
+#Then, join these back into dataframe
+dataFirstJoin <- data %>%
+  filter(!(grepl("Nearest neigh.|Other vig.", Behavior) & str_count(Behavior, ";") == 0)) %>%
+  mutate(Dig_only = ifelse(grepl("Dig", Behavior) | grepl("Re-Dig", Behavior), Behavior, NA)) %>%
+  mutate(End_only = ifelse(Behavior == "End (+Modifiers)", Behavior, NA)) %>%
+  mutate(Followed = case_when(!grepl("Dig; End", Behavior) & grepl("End|Dig", lead(Behavior)) & grepl("Dig", Behavior) ~ "TRUE",
+                            !grepl("Re-Dig; End", Behavior) & grepl("End|Re-Dig", lead(Behavior)) & grepl("Re-Dig", Behavior) ~ "TRUE",
+                            TRUE ~ "")) %>%
+  mutate(Dig_followed_by_other = NA) %>%
+  mutate(Dig_followed_by_other = ifelse(!is.na(Dig_only) & !grepl("End", Behavior) & Followed != "TRUE", TRUE, NA)) %>%
+  mutate(End.Sec = ifelse(Dig_followed_by_other == TRUE, lead(St.Sec), End.Sec)) %>%
+  mutate(Duration = End.Sec - St.Sec) %>%
+  filter(!is.na(Dig_followed_by_other)) %>%
+  select(Date, St.Sec, OG_order, End.Sec, Duration, Behavior, Modifiers, Comments, removerow, Dig_followed_by_other, CHECK)
+
+data <- right_join(dataFirstJoin, data, by = c("Date", "St.Sec", "OG_order")) %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x",) %>%
+  subset(is.na(removerow)) %>%
+  mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
+  mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
+  mutate(End.Sec = ifelse(is.na(End.Sec) & !is.na(End.Sec.y), End.Sec.y, End.Sec)) %>%
+  mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
+  mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
+  mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
+  arrange(OG_order) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y)
+
 dataDig <- data %>%
   mutate(mult_sizes_CHECK = NA) %>%
+  filter(is.na(Dig_followed_by_other)) %>% 
   mutate(Dig_only = ifelse(grepl("Dig", Behavior) | grepl("Re-Dig", Behavior), Behavior, NA)) %>%
   mutate(End_only = ifelse(Behavior == "End (+Modifiers)", Behavior, NA)) %>%
   filter(!is.na(Dig_only) | !is.na(End_only)) %>%
@@ -162,12 +219,16 @@ dataDig <- data %>%
                                is.na(CHECK) & Behavior == "Dig; End (+Modifiers)" &
                                  grepl("Re-Dig; End (+Modifiers)", lag(Modifiers)) ~ TRUE,
                                TRUE ~ removerow)) %>%
-  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, CHECK, mult_sizes_CHECK)
+  mutate(Comments = ifelse(lead(removerow) == TRUE & !is.na(lead(Comments)), lead(Comments), Comments)) %>%
+  select(Date, St.Sec, End.Sec, Duration, Behavior, OG_order, Modifiers, removerow, Comments, CHECK, mult_sizes_CHECK)
 ```
 
 ```{r joining-dataframes}
+data <- data %>%
+  select(-Dig_followed_by_other)
+
 datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x",) %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -175,10 +236,11 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y) %>%
   right_join(dataInBurr, ., by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x") %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -186,10 +248,11 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y) %>%
   right_join(dataGT, ., by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x") %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -197,10 +260,11 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y) %>%
   right_join(dataBurrBH, ., by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x") %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -208,10 +272,11 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y) %>%
   right_join(dataOOV, ., by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x") %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -219,10 +284,11 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y) %>%
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y) %>%
   right_join(dataDig, ., by = c("Date", "St.Sec", "OG_order")) %>%
-  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x") %>%
+  rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x") %>%
   subset(is.na(removerow)) %>%
   mutate(Modifiers = ifelse(is.na(Modifiers) & !is.na(Modifiers.y), Modifiers.y, Modifiers)) %>%
   mutate(Behavior = ifelse(is.na(Behavior) & !is.na(Behavior.y), Behavior.y, Behavior)) %>%
@@ -230,8 +296,9 @@ datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
   mutate(Duration = ifelse(is.na(Duration) & !is.na(Duration.y), Duration.y, Duration)) %>%
   mutate(removerow = ifelse(is.na(removerow) & !is.na(removerow.y), removerow.y, removerow)) %>%
   mutate(CHECK = ifelse(is.na(CHECK) & !is.na(CHECK.y), CHECK.y, CHECK)) %>%
+  mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
   arrange(OG_order) %>%
-  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y)
+  select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Behavior.y, -Comments.y)
 ```
 
 ```{r DigEndModifier}
@@ -462,12 +529,11 @@ data <- rbindlist(list(behaviorToDup, data))[order(OG_order)]
     mutate(Date = gsub(" 12:00:00 AM", "", Date)) %>%
     rename("Aggression/Submission" = "AggSub") %>%
     rename_at(vars(starts_with('Time...')), ~"Time") %>%
-    rename_at(vars(ends_with('focal individual')), ~"Focal individual") %>%
     rename_at(vars(ends_with('Partner')), ~"Partner(s)") %>%
     select(-removerow, -OB, -St.Sec, -OG_order, -End.Sec, -ToDup, -HasApproach, -ToReceive, -InitiateAndReceive)
   
-  setcolorder(data, c("Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
-                    "Groups", "Focal individual", "Behavior", "Partner(s)", "Aggression/Submission", 
+  setcolorder(data, c("Focal.ID","Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
+                    "Groups", "Focal individual", "Location",  "Behavior", "Partner(s)", "Aggression/Submission", 
                     "Olfactory", "Play", "Pup care", "Sex", "Modifiers", "Life History", "Time",
                     "Time spent running", "Comments", "CHECK"))
 ```
@@ -475,6 +541,3 @@ data <- rbindlist(list(behaviorToDup, data))[order(OG_order)]
 ```{r}
 write.xlsx(data, "data_file.xlsx")
 ```
-
-
-
