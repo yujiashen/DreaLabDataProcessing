@@ -47,9 +47,9 @@ data <- data %>%
 ```{r Focal.ID}
 data <- data %>%
   #Get focal indiv name between parentheses
-  mutate(focal_ind = gsub("(?<=\\()[^()]*(?=\\))(*SKIP)(*F)|.", "", `Focal individual`, perl=T)) %>%
-  #Fill rest of column with previous focal_ind
-  fill(focal_ind) %>%
+  mutate(KMP.ID = gsub("(?<=\\()[^()]*(?=\\))(*SKIP)(*F)|.", "", `Focal individual`, perl=T)) %>%
+  #Fill rest of column with previous KMP.ID
+  fill(KMP.ID) %>%
   mutate(Location = case_when(grepl("Burrow", `Focal individual`) & !grepl("Forage", `Focal individual`) ~ "Burrow",
                               grepl("Forage", `Focal individual`) & !grepl("Burrow", `Focal individual`) ~ "Forage",
                               grepl("Burrow", `Focal individual`) & grepl("Forage", `Focal individual`) ~ "Burrow; Forage")) %>%
@@ -57,10 +57,10 @@ data <- data %>%
   mutate(is_Start = ifelse(grepl("Start focal", Behavior), TRUE, FALSE)) %>%
   #When a new Start focal appears, iterate the focal number
   mutate(focalnum = ifelse(is_Start == TRUE, 0 + cumsum(is_Start == TRUE), 0 + cumsum(is_Start == TRUE))) %>%
-  unite(Focal.ID, month, focalnum, focal_ind, sep = ".") %>%
+  unite(Focal.ID, month, focalnum, KMP.ID, sep = ".", remove = FALSE) %>%
   relocate(Focal.ID) %>%
   relocate(Location, .after = `Focal individual`) %>%
-  select(-is_Start)
+  select(-is_Start, -month, -focalnum)
 ```
 
 ```{r Pupcare}
@@ -532,10 +532,10 @@ data <- rbindlist(list(behaviorToDup, data))[order(OG_order)]
     rename_at(vars(ends_with('Partner')), ~"Partner(s)") %>%
     select(-removerow, -OB, -St.Sec, -OG_order, -End.Sec, -ToDup, -HasApproach, -ToReceive, -InitiateAndReceive)
   
-  setcolorder(data, c("Focal.ID","Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
-                    "Groups", "Focal individual", "Location",  "Behavior", "Partner(s)", "Aggression/Submission", 
-                    "Olfactory", "Play", "Pup care", "Sex", "Modifiers", "Life History", "Time",
-                    "Time spent running", "Comments", "CHECK"))
+  setcolorder(data, c("Focal.ID", "Location", "Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
+                      "Groups", "KMP.ID", "Focal individual", "Behavior", "Partner(s)", "Aggression/Submission", 
+                      "Olfactory", "Play", "Pup care", "Sex", "Modifiers", "Life History", "Time",
+                      "Time spent running", "Comments", "CHECK"))
 ```
 
 ```{r}
