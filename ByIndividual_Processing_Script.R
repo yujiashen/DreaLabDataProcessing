@@ -23,14 +23,14 @@ for(i in shortlst) {
     i$Time...2 <- gsub("1899-12-31 ", "", i$Time...2)
     i$Time...2 <- as_hms(i$Time...2)
   }
-  
+
   data <- i %>% rename(St.Time = "Time...2", Behavior = "Behavior/Category", AggSub = "Aggression/Submission", Pupcare = "Pup care") %>%
     rename_at(vars(ends_with('focal individual')), ~"Focal individual")
-  
+
   data$Play <- as.character(data$Play)
   data$AggSub <- as.character(data$AggSub)
   data$Olfactory <- as.character(data$Olfactory)
-  
+
   data <- data %>%
     mutate(End.Time = as.numeric(NA), .after = "St.Time") %>%
     mutate(End.Sec = as.numeric(NA), .after = "End.Time") %>%
@@ -39,13 +39,13 @@ for(i in shortlst) {
     mutate(OG_order = seq.int(nrow(data))) %>%
     mutate(CHECK = NA) %>%
     mutate(removerow = NA)
-  
+
   ## ----Focal.ID-------------------------------------------------------------------------------------------------------------------------------------------------------------
   data <- data %>%
     #Get focal indiv name between parentheses
-    mutate(focal_ind = gsub("(?<=\\()[^()]*(?=\\))(*SKIP)(*F)|.", "", `Focal individual`, perl=T)) %>%
-    #Fill rest of column with previous focal_ind
-    fill(focal_ind) %>%
+    mutate(KMP.ID = gsub("(?<=\\()[^()]*(?=\\))(*SKIP)(*F)|.", "", `Focal individual`, perl=T)) %>%
+    #Fill rest of column with previous KMP.ID
+    fill(KMP.ID) %>%
     mutate(Location = case_when(grepl("Burrow", `Focal individual`) & !grepl("Forage", `Focal individual`) ~ "Burrow",
                                 grepl("Forage", `Focal individual`) & !grepl("Burrow", `Focal individual`) ~ "Forage",
                                 grepl("Burrow", `Focal individual`) & grepl("Forage", `Focal individual`) ~ "Burrow; Forage")) %>%
@@ -53,10 +53,10 @@ for(i in shortlst) {
     mutate(is_Start = ifelse(grepl("Start focal", Behavior), TRUE, FALSE)) %>%
     #When a new Start focal appears, iterate the focal number
     mutate(focalnum = ifelse(is_Start == TRUE, 0 + cumsum(is_Start == TRUE), 0 + cumsum(is_Start == TRUE))) %>%
-    unite(Focal.ID, month, focalnum, focal_ind, sep = ".") %>%
+    unite(Focal.ID, month, focalnum, KMP.ID, sep = ".", remove = FALSE) %>%
     relocate(Focal.ID) %>%
     relocate(Location, .after = `Focal individual`) %>%
-    select(-is_Start)
+    select(-is_Start, -month, -focalnum)
   ## ----Pup-care-------------------------------------------------------------------------------------------------------------------------------------------------------------
   data <- data %>%
     mutate(CHECK = ifelse(!is.na(Pupcare), TRUE, CHECK)) %>%
@@ -79,7 +79,7 @@ for(i in shortlst) {
   ## ----GT-------------------------------------------------------------------------------------------------------------------------------------------------------------
   dataGT <- data %>%
     mutate(GT_only = ifelse(grepl("GT", Behavior), TRUE, NA)) %>%
-    mutate(GT_and_following = ifelse(grepl("GT", Behavior) & grepl("GT", lag(Behavior)) & 
+    mutate(GT_and_following = ifelse(grepl("GT", Behavior) & grepl("GT", lag(Behavior)) &
                                        !grepl("GT other", Behavior), Behavior, NA)) %>%
     filter(!is.na(GT_and_following)) %>%
     mutate(End = if_else(grepl("GT; End", Behavior), "TRUE", " ")) %>%
@@ -95,7 +95,7 @@ for(i in shortlst) {
   ## ----Burr/BH--------------------------------------------------------------------------------------------------------------------------------------------------------
   dataBurrBH <- data %>%
     mutate(BurrBH_only = ifelse(grepl("Burr/BH renn", Behavior), TRUE, NA)) %>%
-    mutate(BurrBH_and_following = ifelse(grepl("Burr/BH renn", Behavior) | 
+    mutate(BurrBH_and_following = ifelse(grepl("Burr/BH renn", Behavior) |
                                            grepl("Burr/BH renn", lag(Behavior)), Behavior, NA)) %>%
     filter(!is.na(BurrBH_and_following)) %>%
     mutate(End = if_else(grepl("Burr/BH renn; End", Behavior), "TRUE", " ")) %>%
@@ -156,7 +156,7 @@ for(i in shortlst) {
     mutate(Duration = End.Sec - St.Sec) %>%
     filter(!is.na(Dig_followed_by_other)) %>%
     select(Date, St.Sec, OG_order, End.Sec, Duration, Behavior, Modifiers, Comments, removerow, Dig_followed_by_other, CHECK)
-  
+
   data <- right_join(dataFirstJoin, data, by = c("Date", "St.Sec", "OG_order")) %>%
     rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x",) %>%
     subset(is.na(removerow)) %>%
@@ -169,10 +169,10 @@ for(i in shortlst) {
     mutate(Comments = ifelse(is.na(Comments) & !is.na(Comments.y), Comments.y, Comments)) %>%
     arrange(OG_order) %>%
     select(-Modifiers.y, -End.Sec.y, -Duration.y, -removerow.y, -CHECK.y, -Comments.y, -Behavior.y)
-  
+
   dataDig <- data %>%
     mutate(mult_sizes_CHECK = NA) %>%
-    filter(is.na(Dig_followed_by_other)) %>% 
+    filter(is.na(Dig_followed_by_other)) %>%
     mutate(Dig_only = ifelse(grepl("Dig", Behavior) | grepl("Re-Dig", Behavior), Behavior, NA)) %>%
     mutate(End_only = ifelse(Behavior == "End (+Modifiers)", Behavior, NA)) %>%
     filter(!is.na(Dig_only) | !is.na(End_only)) %>%
@@ -212,7 +212,7 @@ for(i in shortlst) {
   ## ----joining-dataframes---------------------------------------------------------------------------------------------------------------------------------------------
   data <- data %>%
     select(-Dig_followed_by_other)
-  
+
   datajoin <- right_join(dataGA, data, by = c("Date", "St.Sec", "OG_order")) %>%
     rename(End.Sec = "End.Sec.x", Duration = "Duration.x", removerow = "removerow.x", Modifiers = "Modifiers.x", CHECK = "CHECK.x", Behavior = "Behavior.x", Comments = "Comments.x",) %>%
     subset(is.na(removerow)) %>%
@@ -512,9 +512,9 @@ for(i in shortlst) {
     rename_at(vars(starts_with('Time...')), ~"Time") %>%
     rename_at(vars(ends_with('Partner')), ~"Partner(s)") %>%
     select(-removerow, -OB, -St.Sec, -OG_order, -End.Sec, -ToDup, -HasApproach, -ToReceive, -InitiateAndReceive)
-  
-  setcolorder(data, c("Focal.ID","Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
-                      "Groups", "Focal individual", "Location",  "Behavior", "Partner(s)", "Aggression/Submission", 
+
+  setcolorder(data, c("Focal.ID", "Location", "Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
+                      "Groups", "KMP.ID", "Focal individual", "Behavior", "Partner(s)", "Aggression/Submission",
                       "Olfactory", "Play", "Pup care", "Sex", "Modifiers", "Life History", "Time",
                       "Time spent running", "Comments", "CHECK"))
   ## -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -525,4 +525,4 @@ for(i in shortlst) {
 
 sheetnamesvec <- excel_sheets("data/Pup8MoIndividual_copy_for_ys.xlsx")
 names(newlist) <- sheetnamesvec[2:59]
-write.xlsx(newlist, "Pup8MoIndividual_ys_v8.xlsx", append = TRUE)
+write.xlsx(newlist, "Pup8MoIndividual_ys_v9.xlsx", append = TRUE)
