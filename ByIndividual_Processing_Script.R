@@ -511,6 +511,7 @@ for(i in shortlst) {
     rename("Aggression/Submission" = "AggSub") %>%
     rename_at(vars(starts_with('Time...')), ~"Time") %>%
     rename_at(vars(ends_with('Partner')), ~"Partner(s)") %>%
+    mutate(Date = format(as.Date(Date), "%m/%d/%Y")) %>%
     select(-removerow, -OB, -St.Sec, -OG_order, -End.Sec, -ToDup, -HasApproach, -ToReceive, -InitiateAndReceive)
 
   setcolorder(data, c("Focal.ID", "Location", "Date", "St.Time", "End.Time", "Duration", "S.Duration", "Observer",
